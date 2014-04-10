@@ -35,6 +35,3 @@ ISR(TIMER1_OVF_vect) //ISR with timer overflow interrupt argument
 		PORTB ^= 0b11111111; //toggle all ports using XOR
 	}
 }
-
-
-
