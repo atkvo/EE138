@@ -2,19 +2,17 @@
 // Members: Johnston Chong, Janice Pham, Andrew Vo
 // Project: Elevator 
 // Task   : Make design a multi-floor elevator
-// Specs  :
+// Specs  : Outside Features * Call button using interrupt (open door)
 //
-//	Outside Features * Call button using interrupt (open door)
+// 			Inside Features  * Keypad controls movement up to 9 floors (after delay)
+// 							 * * On multiple floor req, elevator must stop at each floor
 //
-//	Inside Features  * Keypad controls movement up to 9 floors (after delay)
-//			 * * On multiple floor req, elevator must stop at each floor
+// 			Door Features    * On destination, open doors for X time before closing
+// 							 * * If no other floors selected, close door and stay there
 //
-//	Door Features    * On destination, open doors for X time before closing
-// 			 * * If no other floors selected, close door and stay there
-//
-// 	Extra Credit 	 * Bell for door close / destination reached, alarm, etc
-// 			 * Sensor for if anything is in between the doors
-// 			 * Anything else?
+// 			Extra Credit 	 * Bell for door close / destination reached, alarm, etc
+// 							 * Sensor for if anything is in between the doors
+// 							 * Anything else?
 //
 
 
@@ -25,9 +23,9 @@
 
 // keypad array set as a GLOBAL variable
 unsigned char keypad_key[4][4] = {{'1', '2', '3', 'A'},
-				{'4', '5', '6', 'B'},
-				{'7', '8', '9', 'C'},
-				{'*', '0', '#', 'D'}};
+								{'4', '5', '6', 'B'},
+								{'7', '8', '9', 'C'},
+								{'*', '0', '#', 'D'}};
 
 
 // Define state machine names here
