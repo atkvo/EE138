@@ -12,7 +12,6 @@
 //	Door Features    * On destination, open doors for X time before closing
 // 			 * * If no other floors selected, close door and stay there
 //
-// 	Extra Credit 	 * Bell for door close / destination reached, alarm, etc
 // 			 * Sensor for if anything is in between the doors
 // 			 * Anything else?
 //
@@ -29,13 +28,34 @@ unsigned char keypad_key[4][4] = {{'1', '2', '3', 'A'},
 				{'7', '8', '9', 'C'},
 				{'*', '0', '#', 'D'}};
 
+// PORT Declarations
+// Motors - Johnston
+// PD4,5 PWM output
+// Timer1
+// Use overflow to count time passed
 
-// Define state machine names here
+// Bell - Janice
+// Use timer2
+// PD7 for PWM output
+
+// Keypad 
+// Use PortC
+
+// 7Segment 
+// PA[7:1]
+
+// ADC0
+// PA[0]
+
+// delay timer0
+
 // function names here as well
-//
+// 
 unsigned char read_keypad(unsigned char digit_old);
 void display_7led(unsigned char a);
-
+void bell();
+void door(int d);		// d = 1 open, d = 0 close
+void elevator_movement();
 
 
 int main (void)
