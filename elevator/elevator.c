@@ -49,30 +49,139 @@ unsigned char keypad_key[4][4] = {{'1', '2', '3', 'A'},
 
 // delay timer0
 
+
+int delay_time = 0; //used to count seconds
+// status flags
+int call_flag=0;
+int sel_flag=0;
+int delay_flag = 0;
+
+char nextfloor[9] = {0};
 // function names here as well
 // 
+
+enum states {
+    idle,
+    move_x,
+    open,
+    delay_door,
+    closing
+};
+
 unsigned char read_keypad(unsigned char digit_old);
 void display_7led(unsigned char a);
 void bell();
 void door(int d);		// d = 1 open, d = 0 close
 void elevator_movement();
-
-
+void delay();
+void flooraddsort(char digit, int mode);
+void timer_init();		// initialize your timers here
 int main (void)
 {
 	unsigned char digit;
-	
+	enum states state = idle; // initial state is idle
+
 	DDRA  = 0xF0;		// P.A[7:4] OUT P.A[3:0] IN
 	PORTA = 0xFF;		// P.A[3:0] Pullup P.A[7:4] set HIGH
+
 	while(1)
 	{
+	    switch(state){
+	    case idle:
+	    	read_keypad();
+	    	if (call_flag==1)
+		{
+		    state=move_x;
+		    sel_flag=0;
+		}
+		else if (sel_flag==1)
+		{
+		    state=delay_door;
+		    sel_flag=0;
+		}
+		else
+		    state = idle;
+	    	break;
+	    case move_x:
+		break;
+	    case open:
+	    	break;
+	    case delay_door: //use ISR routine for counting 3 seconds
+	    	delay_flag=1;
+	    	digit = read_keypad(); //read keypad (IN PROGRESS)
+
+	    	if (sel_flag==1)
+	    	    delay_time = 0;
+
+	    	if (delay_time == 3)
+		{
+		    state = move_x;
+		    delay_time = 0;
+		}
+	    	break;
+	    case closing:
+	    	//run close door function here
+	    	if (sel_flag==1)
+		{
+		    state = delay_door;
+		    sel_flag = 0;
+		}
+		else if (/*TERMINATEFLOOR*/)
+		{
+		    memset(nextfloor, '0', 9); //clear floors
+		    state = idle;
+		}
+		else
+		    state = idle;
+	    	break;
+	    default:
+	    	;
+
+	    }
 	}
 
 	return 1;
 }
 
+ISR(TIMER0_OVF_vect)
+{
+    overflow0_count++;
+    if (overflow0_count >=3906) // incr every sec 
+    {
+    	overflow_count = 0;
+    	if (delay_flag==1)
+    	    delay_time++;
+	else
+	    ;
+	    
+    }
+
+}
 // program should consist of multiple functions instead of long main code (make it modular)
 //
+
+void flooraddsort(char digit, int mode) //mode 0 = reset, mode 1 = add
+{
+    int y;
+    if (mode == 0)
+    {
+    	y=0;
+    }
+    else
+    {
+
+    }
+}
+
+void timer_init()
+{
+    	TCCR0A = 0b00000000;
+    	TCCR0B = 0b00000001;
+        /*TIMSK  = 0b00000100;*/
+        // Please use method below to enable your interrupts
+        TIMSK |= (1 << TOIE0); //enable interrupt for timer0
+
+}
 
 unsigned char read_keypad(unsigned char digit_old){
 	unsigned char digit;
@@ -109,10 +218,19 @@ unsigned char read_keypad(unsigned char digit_old){
 
 	if (pressed==1){ //pressed=1 means a key has been pressed
 		digit = keypad_key[y][x]; // returns a digit based on y,x coord
-		return digit;
+		if ((digit == 'A')|(digit == 'B')|(digit == 'C')|(digit == 'D'))
+		    call_flag = 1;
+		else
+		{
+		    sel_flag = 1;
+		    flooraddsort(digit);
+		}
+
+		/*return digit;*/
 	}
 	else
-		return digit_old;	//if no button press is detected, print old digit
+	    ;
+		/*return digit_old;	//if no button press is detected, print old digit*/
 }
 
 void display_7led(unsigned char a)
