@@ -55,6 +55,8 @@ int delay_time = 0; //used to count seconds
 int call_flag=0;
 int sel_flag=0;
 int delay_flag = 0;
+int fr_flag = 0; //signals floor is reached when 1
+int dir_flag = 0; // 0 signals down, 1 signals up 
 
 char nextfloor[9] = {0};
 // function names here as well
@@ -64,7 +66,9 @@ enum states {
     idle,
     move_x,
     open,
-    delay_door,
+    delay_close,
+    delay,
+    sort,
     closing
 };
 
@@ -72,7 +76,7 @@ unsigned char read_keypad(unsigned char digit_old);
 void display_7led(unsigned char a);
 void bell();
 void door(int d);		// d = 1 open, d = 0 close
-void elevator_movement();
+void elevator_movement();	// should take into account desired direction
 void delay();
 void flooraddsort(char digit, int mode);
 void timer_init();		// initialize your timers here
@@ -83,7 +87,6 @@ int main (void)
 
 	DDRA  = 0xF0;		// P.A[7:4] OUT P.A[3:0] IN
 	PORTA = 0xFF;		// P.A[3:0] Pullup P.A[7:4] set HIGH
-
 	while(1)
 	{
 	    switch(state){
@@ -96,17 +99,31 @@ int main (void)
 		}
 		else if (sel_flag==1)
 		{
-		    state=delay_door;
+		    state=delay;
 		    sel_flag=0;
 		}
 		else
 		    state = idle;
 	    	break;
 	    case move_x:
+	    	if(fr_flag==1)
+		{
+		    state=open; //open door when desired floor reached
+		}
 		break;
 	    case open:
+	    	//run func to open door
+		state = delay_close;	    	//move to delay before closing door
 	    	break;
-	    case delay_door: //use ISR routine for counting 3 seconds
+	    case delay_close:
+	    	delay_flag=1;
+	    	if (delay_time == 3)
+		{
+		    state = closing;
+		    delay_time =0;
+		}
+	    	break;
+	    case delay: //use ISR routine for counting 3 seconds
 	    	delay_flag=1;
 	    	digit = read_keypad(); //read keypad (IN PROGRESS)
 
@@ -115,7 +132,7 @@ int main (void)
 
 	    	if (delay_time == 3)
 		{
-		    state = move_x;
+		    state = sort;
 		    delay_time = 0;
 		}
 	    	break;
@@ -123,7 +140,7 @@ int main (void)
 	    	//run close door function here
 	    	if (sel_flag==1)
 		{
-		    state = delay_door;
+		    state = delay;
 		    sel_flag = 0;
 		}
 		else if (/*TERMINATEFLOOR*/)
@@ -133,6 +150,10 @@ int main (void)
 		}
 		else
 		    state = idle;
+	    	break;
+	    case sort:
+	    	sortarray();
+	    	state = move_x;
 	    	break;
 	    default:
 	    	;
@@ -160,6 +181,10 @@ ISR(TIMER0_OVF_vect)
 // program should consist of multiple functions instead of long main code (make it modular)
 //
 
+void sortarray()
+{
+    // sort array here and return it?
+}
 void flooraddsort(char digit, int mode) //mode 0 = reset, mode 1 = add
 {
     int y;
