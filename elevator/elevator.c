@@ -22,12 +22,6 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 
-// keypad array set as a GLOBAL variable
-unsigned char keypad_key[4][4] = {{'1', '2', '3', 'A'},
-				{'4', '5', '6', 'B'},
-				{'7', '8', '9', 'C'},
-				{'*', '0', '#', 'D'}};
-
 // PORT Declarations
 // Motors - Johnston
 // PD4,5 PWM output
@@ -49,19 +43,11 @@ unsigned char keypad_key[4][4] = {{'1', '2', '3', 'A'},
 
 // delay timer0
 
-
-int delay_time = 0; //used to count seconds
-// status flags
-int call_flag=0;
-int sel_flag=0;
-int delay_flag = 0;
-int fr_flag = 0; //signals floor is reached when 1
-int dir_flag = 0; // 0 signals down, 1 signals up 
-
-char nextfloor[9] = {0};
-// function names here as well
-// 
-
+// *** GENERIC GLOBAL VARIABLES HERE ***
+unsigned char keypad_key[4][4] = {{'1', '2', '3', 'A'},
+				{'4', '5', '6', 'B'},
+				{'7', '8', '9', 'C'},
+				{'*', '0', '#', 'D'}};
 enum states {
     idle,
     move_x,
@@ -72,21 +58,39 @@ enum states {
     closing
 };
 
+int delay_time = 0; //used to count seconds (timer0)
+// *** GENERIC GLOBAL VARIABLES END ***
+
+
+// *** status flags BEGIN ***
+int call_flag=0;
+int sel_flag=0;
+int delay_flag = 0;
+int fr_flag = 0; //signals floor is reached when 1
+int dir_flag = 0; // 0 signals down, 1 signals up 
+char nextfloor[9] = {0};
+// *** status flags END ***
+
+
+// *** FUNCTIONS HERE ***
 unsigned char read_keypad(unsigned char digit_old);
 void display_7led(unsigned char a);
 void bell();
 void door(int d);		// d = 1 open, d = 0 close
 void elevator_movement();	// should take into account desired direction
-void delay();
+void delay();			// generic delay func using timer0
 void flooraddsort(char digit, int mode);
 void timer_init();		// initialize your timers here
+// *** FUNCTIONS END ***
+
+
 int main (void)
 {
 	unsigned char digit;
 	enum states state = idle; // initial state is idle
 
-	DDRA  = 0xF0;		// P.A[7:4] OUT P.A[3:0] IN
-	PORTA = 0xFF;		// P.A[3:0] Pullup P.A[7:4] set HIGH
+	DDRC  = 0xF0;		// P.A[7:4] OUT P.A[3:0] IN
+	PORTC = 0xFF;		// P.A[3:0] Pullup P.A[7:4] set HIGH
 	while(1)
 	{
 	    switch(state){
@@ -113,6 +117,7 @@ int main (void)
 		break;
 	    case open:
 	    	//run func to open door
+		door(1);		// ask to open the door
 		state = delay_close;	    	//move to delay before closing door
 	    	break;
 	    case delay_close:
@@ -120,7 +125,7 @@ int main (void)
 	    	if (delay_time == 3)
 		{
 		    state = closing;
-		    delay_time =0;
+		    delay_time = 0;
 		}
 	    	break;
 	    case delay: //use ISR routine for counting 3 seconds
@@ -138,6 +143,7 @@ int main (void)
 	    	break;
 	    case closing:
 	    	//run close door function here
+	    	door(0); //close the door
 	    	if (sel_flag==1)
 		{
 		    state = delay;
@@ -163,7 +169,7 @@ int main (void)
 
 	return 1;
 }
-
+// *** ISRs BEGIN ***
 ISR(TIMER0_OVF_vect)
 {
     overflow0_count++;
@@ -178,10 +184,13 @@ ISR(TIMER0_OVF_vect)
     }
 
 }
-// program should consist of multiple functions instead of long main code (make it modular)
-//
+// *** ISRs END ***
 
-void sortarray()
+
+
+// *** FUNCTIONS ***
+// please add comments to your functions to explain functionality
+void sortarray() //not sure if needed yet
 {
     // sort array here and return it?
 }
@@ -198,14 +207,19 @@ void flooraddsort(char digit, int mode) //mode 0 = reset, mode 1 = add
     }
 }
 
-void timer_init()
+void timer_init() // All timer configurations go here
 {
+    // TIMER0 begin
     	TCCR0A = 0b00000000;
     	TCCR0B = 0b00000001;
+    // TIMER0 end
+
+
         /*TIMSK  = 0b00000100;*/
         // Please use method below to enable your interrupts
+        // TIMSK is used for all timers 
+	// usage: TIMSK |= (1 << desiredbit)
         TIMSK |= (1 << TOIE0); //enable interrupt for timer0
-
 }
 
 unsigned char read_keypad(unsigned char digit_old){
@@ -263,52 +277,52 @@ void display_7led(unsigned char a)
 	switch(a)
 	{
 		case '0':
-			PORTB = 0x40;
+			PORTA = 0x40;
 			break;
 		case '1':
-			PORTB = 0x79;
+			PORTA = 0x79;
 			break;
 		case '2':
-			PORTB = 0x24;
+			PORTA = 0x24;
 			break;
 		case '3':
-			PORTB = 0x30;
+			PORTA = 0x30;
 			break;
 		case '4':
-			PORTB = 0x19;
+			PORTA = 0x19;
 			break;
 		case '5':
-			PORTB = 0x12;
+			PORTA = 0x12;
 			break;
 		case '6':
-			PORTB = 0x02;
+			PORTA = 0x02;
 			break;
 		case '7':
-			PORTB = 0x78;
+			PORTA = 0x78;
 			break;
 		case '8':
-			PORTB = 0x00;
+			PORTA = 0x00;
 			break;
 		case '9':
-			PORTB = 0x10;
+			PORTA = 0x10;
 			break;
 		case 'A':
-			PORTB = 0x08;
+			PORTA = 0x08;
 			break;
 		case 'B':
-			PORTB = 0x03;
+			PORTA = 0x03;
 			break;
 		case 'C':
-			PORTB = 0x46;
+			PORTA = 0x46;
 			break;
 		case 'D':
-			PORTB = 0x21;
+			PORTA = 0x21;
 			break;
 		case '*':
-			PORTB = 0x23;
+			PORTA = 0x23;
 			break;
 		case '#':
-			PORTB = 0x0F;
+			PORTA = 0x0F;
 			break;
 	}
 }
