@@ -59,6 +59,8 @@ enum states {
 };
 
 int delay_time = 0; //used to count seconds (timer0)
+volatile int overflow_count1;	
+volatile int overflow_count0;
 // *** GENERIC GLOBAL VARIABLES END ***
 
 
@@ -78,7 +80,7 @@ void display_7led(unsigned char a);
 void bell();
 void door(int d);		// d = 1 open, d = 0 close
 void elevator_movement();	// should take into account desired direction
-void delay();			// generic delay func using timer0
+void pause();			// generic delay func using timer0
 void flooraddsort(char digit, int mode);
 void timer_init();		// initialize your timers here
 // *** FUNCTIONS END ***
@@ -86,7 +88,8 @@ void timer_init();		// initialize your timers here
 
 int main (void)
 {
-	unsigned char digit;
+	unsigned char key_floor;
+	unsigned char key_floor_old = 1;
 	enum states state = idle; // initial state is idle
 
 	DDRC  = 0xF0;		// P.A[7:4] OUT P.A[3:0] IN
@@ -95,7 +98,7 @@ int main (void)
 	{
 	    switch(state){
 	    case idle:
-	    	read_keypad();
+	    	key_floor = read_keypad(key_floor_old);
 	    	if (call_flag==1)
 		{
 		    state=move_x;
@@ -130,7 +133,7 @@ int main (void)
 	    	break;
 	    case delay: //use ISR routine for counting 3 seconds
 	    	delay_flag=1;
-	    	digit = read_keypad(); //read keypad (IN PROGRESS)
+	    	key_floor = read_keypad(key_floor_old); //read keypad (IN PROGRESS)
 
 	    	if (sel_flag==1)
 	    	    delay_time = 0;
@@ -151,7 +154,7 @@ int main (void)
 		}
 		else if (/*TERMINATEFLOOR*/)
 		{
-		    memset(nextfloor, '0', 9); //clear floors
+//		    memset(nextfloor, '0', 9); //clear floors
 		    state = idle;
 		}
 		else
@@ -172,10 +175,10 @@ int main (void)
 // *** ISRs BEGIN ***
 ISR(TIMER0_OVF_vect)
 {
-    overflow0_count++;
-    if (overflow0_count >=3906) // incr every sec 
+    overflow_count0++;
+    if (overflow_count0 >=3906) // incr every sec 
     {
-    	overflow_count = 0;
+    	overflow_count0 = 0;
     	if (delay_flag==1)
     	    delay_time++;
 	else
@@ -183,6 +186,16 @@ ISR(TIMER0_OVF_vect)
 	    
     }
 
+}
+
+ISR(TIMER1_OVF_vect) // ISR with timer overflow interrupt argument
+{
+    overflow_count1++;       // increase when overflow reached
+    if(overflow_count1 >= 100) // if count is (greater/equal) passed
+    {							// I pick a random number ~100
+	overflow_count1 = 0;  // reset overflow counter
+	 DDRD ^= 0b00110000; // toggle PD4(OC1B) and PD5(OC1A)
+    }	
 }
 // *** ISRs END ***
 
@@ -210,16 +223,24 @@ void flooraddsort(char digit, int mode) //mode 0 = reset, mode 1 = add
 void timer_init() // All timer configurations go here
 {
     // TIMER0 begin
-    	TCCR0A = 0b00000000;
-    	TCCR0B = 0b00000001;
+    	TCCR0 = 0b00000001; //no prescale
     // TIMER0 end
 
+    // TIMER1 begin
+	//WGM[3:0] = 1110 for fast PWM & TOP = ICR1 (period width)
+	//CS1[2:0] = 001 for 1MHz no prescale
+	//COM1A[1:0] = 10 for CLEAR OC1A on match (to OCR1A)
+	//COM1B[1:0] = 10
+	TCCR1A = 0b10100010;
+	TCCR1B = 0b00011001;
+    // TIMER1 end
 
         /*TIMSK  = 0b00000100;*/
         // Please use method below to enable your interrupts
         // TIMSK is used for all timers 
 	// usage: TIMSK |= (1 << desiredbit)
-        TIMSK |= (1 << TOIE0); //enable interrupt for timer0
+        TIMSK |= (1 << TOIE0);	//enable interrupt for timer0
+	TIMSK |= 0b00000100;	//enable timer1 ovf int
 }
 
 unsigned char read_keypad(unsigned char digit_old){
