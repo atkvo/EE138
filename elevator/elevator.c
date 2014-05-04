@@ -94,7 +94,6 @@ void bell();
 void move_door();						// function to have door open or close
 void door_check();						// function for door closing transition time, and sensor checking
 void move_elevator(int number_of_floor); // function to have elevator moving up or down
-void pause();			// generic delay func using timer0
 void adjustarray();
 void floor_array_clear();
 void floor_compare_add();	// make sure no duplicates pressed
@@ -440,7 +439,7 @@ void read_keypad(unsigned int digit_old){
 		    if(floor_selection_pointer>5)
 		    	;
 		    else
-		    	floor_compare_add(digit);
+		    	floor_compare_add(digit); //check for duplicates before adding
 		}
 		else
 			;
