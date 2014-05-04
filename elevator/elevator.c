@@ -76,7 +76,7 @@ char floor_selection[5] = {0};
 char floor_distance[5] = {0};
 volatile bool interrupt_ack_flag;	 // flag in the ISR for time delay
 volatile bool elevator_flag;		// 1 means elevator is in up mode, 0 means down mode
-volatile bool door_flag;			// 1 means door is in open mode, 0 means close mode.
+// volatile bool door_flag;			// 1 means door is in open mode, 0 means close mode.
 
 volatile bool call_flag=0;
 volatile bool sel_flag=0;
@@ -138,19 +138,26 @@ int main (void)
 					call_floor_distance = 0;
 				}
 				else
-			 		move_elevator();
+			 		move_elevator(next_distance);
 				if(fr_flag==1)
 				{
+					for(int i = 0; i<5; i++)
+					{
+						if(current_floor==floor_selection[i])
+							floor_selection[i] = 0;		//clear out selection floor when done
+						else
+							;
+					}
 				    state=open; //open door when desired floor reached
 				}
 			} break;
 
 			case open:
 			{		    	//run func to open door
-				door(1);		// ask to open the door
+				move_door(1);		// ask to open the door
 				state = delay_close;	    	//move to delay before closing door
 			} break;
-			
+
 			case delay_close:
 			{
 			    	delay_flag=1;
@@ -169,29 +176,30 @@ int main (void)
 
 			    	if (sel_flag==1)
 			    	{
-			    	    delay_time = 0;
+			    	    delay_time = 0;	//reset delay if key is pressed
 			    	    sel_flag = 0;
 			    	}
 
 			    	if (delay_time == 3)
 				{
-				    state = adj_distance;	// proceed to adjust distance 
+				    state = adj_distance;	// proceed to adjust distance
 				    delay_time = 0;
 				}
 			} break;
-			
+
 			case closing:
 			{    	//run close door function here
-			    	door(0); //close the door
+			    	move_door(0); //close the door
 			    	if ((call_flag==1)|(floor_distance_pointer==5))
 			    	{
 			    		state = idle;
+			    		floor_array_clear;
 			    		call_flag = 0;
 			    	}
 				else
 			    		state = adj_distance;
 			} break;
-			
+
 			case adj_distance:
 			{	adjustarray();
 				state = move_x;
@@ -237,16 +245,19 @@ ISR(TIMER1_OVF_vect)			// ISR with timer overflow interrupt argument
 // *** FUNCTIONS ***
 // please add comments to your functions to explain functionality
 
-void move_elevator(int number_of_floor)
+void move_elevator(int number_of_floor) //will also update current floor
 {
 	unsigned int period = 5000;				// PWM T=5ms or f=200Hz
 	unsigned int duty_cycle;				// duty cycle
+	if(dir_flag == 1)
+		duty_cycle = 70;		// set duty cycle
+	else
+		duty_cycle = 30;
 	unsigned int high_time = (period/100)*duty_cycle;	// PWM highTime=3.5ms
 	unsigned int delay_time_per_floor = 300;		// time to one floor up or down
 	delay_time_move = number_of_floor * delay_time_per_floor; 	//set delay time
 	ICR1 = period;						// set PWM time period to ICR1
-	if(dir_flag == 1) { duty_cycle = 70; }		// set duty cycle
-	else if(dir_flag == 0) { duty_cycle = 30; }
+
 	high_time = (period/100)*duty_cycle;			// set PWM high time to OCR1A
 	OCR1A = high_time;
 	DDRD = 0b00100000;		// enable PD5
@@ -266,21 +277,22 @@ void move_elevator(int number_of_floor)
 
 }
 
-void move_door()
+void move_door(int door_flag)
 {
 	unsigned int period = 5000;				// T=5ms or f=200Hz
 	unsigned int duty_cycle;				// Duty Cycle
-	unsigned int high_time = (period/100)*duty_cycle;	// PWM high time=
-	unsigned int delay_time_door = 100;			// time fo servo to open or close door
-//	delay_time_move = number_of_floor * delay_time_door;
-	ICR1 = period;
-
 	if(door_flag == 1){ duty_cycle = 70;}		// assign duty cycle to open the door
 	else						// assign duty cycle to close the door
 		{
 			door_check();			// check and wait for door close
 			duty_cycle = 30;
 		}
+	unsigned int high_time = (period/100)*duty_cycle;	// PWM high time=
+	unsigned int delay_time_door = 100;			// time fo servo to open or close door
+//	delay_time_move = number_of_floor * delay_time_door;
+	ICR1 = period;
+
+
 	high_time = (period/100)*duty_cycle;		// PWM high time
 	OCR1A = high_time;
 	DDRD = 0b00010000;
@@ -290,6 +302,16 @@ void move_door()
 	while(interrupt_ack_flag==0){;}			//
 	cli();						// disable interrupt
 	DDRD = 0b00000000;				// disable PortD pins
+}
+void door_check()
+{
+	unsigned int delay_door_transition_time = 200;	// transmition time to close the door
+	delay_time_move = delay_door_transition_time;
+	overflow_count1 = 0;
+	interrupt_ack_flag=0;
+	sei();
+	while(interrupt_ack_flag==0){;}
+	cli();
 }
 
 void floor_array_clear()
@@ -313,12 +335,12 @@ void adjustarray() // readjust for floor distance relative to current position a
 		{
 			case 0:
 			{
-				if((next_distance > floor_distance[i])&&(floor_distance[i]>0))	//find closest positive 
+				if((next_distance > floor_distance[i])&&(floor_distance[i]>0))	//find positive closest to 0
 					next_distance = floor_distance[i];
 			} break;
 			case 1:
 			{
-				if((next_distance > floor_distance[i])&&(floor_distance[i]<0))	//find closest negative
+				if((next_distance > floor_distance[i])&&(floor_distance[i]<0))	//find negative closest to 0 
 					next_distance = (-1)*floor_distance[i];
 			} break;
 		}
@@ -400,7 +422,7 @@ void read_keypad(unsigned int digit_old){
 	}
 
 	if (pressed==1) //pressed=1 means a key has been pressed
-	{ 
+	{
 		digit = keypad_key[y][x]; // returns a digit based on y,x coord
 		if ((digit == 44)|(digit == 33)|(digit ==  22)|(digit == 11))
 		{
@@ -414,8 +436,11 @@ void read_keypad(unsigned int digit_old){
 		}
 		else if(digit!=69)
 		{
-		    sel_flag = 1;
-		    floor_compare_add(digit);
+		    sel_flag = 1;	// if floor# is valid, set selection flag high
+		    if(floor_selection_pointer>5)
+		    	;
+		    else
+		    	floor_compare_add(digit);
 		}
 		else
 			;
@@ -444,4 +469,3 @@ void display_7led(unsigned int a)
 			break;
 	}
 }
-
