@@ -1,6 +1,6 @@
 // EE138 Group 6
 // Members: Johnston Chong, Janice Pham, Andrew Vo
-// Project: Elevator 
+// Project: Elevator
 // Task   : Make design a multi-floor elevator
 // Specs  :
 //
@@ -17,10 +17,11 @@
 //
 
 
- 
+
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
+#include <stdbool.h>
 
 // PORT Declarations
 // Motors - Johnston
@@ -32,10 +33,10 @@
 // Use timer2
 // PD7 for PWM output
 
-// Keypad 
+// Keypad
 // Use PortC
 
-// 7Segment 
+// 7Segment
 // PA[7:1]
 
 // ADC0
@@ -44,158 +45,190 @@
 // delay timer0
 
 // *** GENERIC GLOBAL VARIABLES HERE ***
-unsigned char keypad_key[4][4] = {{'1', '2', '3', 'A'},
-				{'4', '5', '6', 'B'},
-				{'7', '8', '9', 'C'},
-				{'*', '0', '#', 'D'}};
+unsigned int keypad_key[4][4] = {{1, 2, 3, 44},
+				{4, 5, 6, 33},
+				{7, 8, 9, 22},
+				{69, 0, 69, 11}};
 enum states {
     idle,
     move_x,
     open,
     delay_close,
     delay,
-    sort,
+    adj_distance,
     closing
 };
 
-int delay_time = 0; //used to count seconds (timer0)
-volatile int overflow_count1;	
+unsigned int delay_time = 0; //used to count seconds (timer0)
+unsigned int delay_time_move;
+volatile int next_distance;
+volatile int overflow_count1;
 volatile int overflow_count0;
+volatile int current_floor = 1;
+volatile int floor_selection_pointer = 1;
+volatile int floor_distance_pointer = 1;
+volatile int call_floor_distance = 0;
 // *** GENERIC GLOBAL VARIABLES END ***
 
 
 // *** status flags BEGIN ***
-int call_flag=0;
-int sel_flag=0;
-int delay_flag = 0;
-int fr_flag = 0; //signals floor is reached when 1
-int dir_flag = 0; // 0 signals down, 1 signals up 
-char nextfloor[9] = {0};
+char floor_selection[5] = {0};
+char floor_distance[5] = {0};
+volatile bool interrupt_ack_flag;	 // flag in the ISR for time delay
+volatile bool elevator_flag;		// 1 means elevator is in up mode, 0 means down mode
+volatile bool door_flag;			// 1 means door is in open mode, 0 means close mode.
+
+volatile bool call_flag=0;
+volatile bool sel_flag=0;
+volatile bool delay_flag = 0;
+volatile bool fr_flag = 0; // "floor reached" flag
+volatile bool dir_flag = 0; // 0 signals down, 1 signals up
+
 // *** status flags END ***
 
 
 // *** FUNCTIONS HERE ***
-unsigned char read_keypad(unsigned char digit_old);
-void display_7led(unsigned char a);
+void read_keypad();
+void display_7led(unsigned int a);
 void bell();
-void door(int d);		// d = 1 open, d = 0 close
-void elevator_movement();	// should take into account desired direction
+void move_door();						// function to have door open or close
+void door_check();						// function for door closing transition time, and sensor checking
+void move_elevator(int number_of_floor); // function to have elevator moving up or down
 void pause();			// generic delay func using timer0
-void flooraddsort(char digit, int mode);
+void adjustarray();
+void floor_array_clear();
+void floor_compare_add();	// make sure no duplicates pressed
 void timer_init();		// initialize your timers here
 // *** FUNCTIONS END ***
 
 
 int main (void)
 {
-	unsigned char key_floor;
-	unsigned char key_floor_old = 1;
 	enum states state = idle; // initial state is idle
 
 	DDRC  = 0xF0;		// P.A[7:4] OUT P.A[3:0] IN
 	PORTC = 0xFF;		// P.A[3:0] Pullup P.A[7:4] set HIGH
 	while(1)
 	{
-	    switch(state){
-	    case idle:
-	    	key_floor = read_keypad(key_floor_old);
-	    	if (call_flag==1)
-		{
-		    state=move_x;
-		    sel_flag=0;
-		}
-		else if (sel_flag==1)
-		{
-		    state=delay;
-		    sel_flag=0;
-		}
-		else
-		    state = idle;
-	    	break;
-	    case move_x:
-	    	if(fr_flag==1)
-		{
-		    state=open; //open door when desired floor reached
-		}
-		break;
-	    case open:
-	    	//run func to open door
-		door(1);		// ask to open the door
-		state = delay_close;	    	//move to delay before closing door
-	    	break;
-	    case delay_close:
-	    	delay_flag=1;
-	    	if (delay_time == 3)
-		{
-		    state = closing;
-		    delay_time = 0;
-		}
-	    	break;
-	    case delay: //use ISR routine for counting 3 seconds
-	    	delay_flag=1;
-	    	key_floor = read_keypad(key_floor_old); //read keypad (IN PROGRESS)
+		switch(state){
+			case idle:
+			{
+				fr_flag = 0;
+				floor_distance_pointer=0;
+				read_keypad();
+				if (call_flag==1)
+				{
+				    state=move_x;
+				    sel_flag=0;
+				}
+				else if (sel_flag==1)
+				{
+				    state=delay;
+				    sel_flag=0;
+				}
+				else
+				    state = idle;
+			} break;
 
-	    	if (sel_flag==1)
-	    	    delay_time = 0;
+			case move_x:
+			{
+				if(call_flag==1)
+				{
+					move_elevator(call_floor_distance);
+					call_floor_distance = 0;
+				}
+				else
+			 		move_elevator();
+				if(fr_flag==1)
+				{
+				    state=open; //open door when desired floor reached
+				}
+			} break;
 
-	    	if (delay_time == 3)
-		{
-		    state = sort;
-		    delay_time = 0;
-		}
-	    	break;
-	    case closing:
-	    	//run close door function here
-	    	door(0); //close the door
-	    	if (sel_flag==1)
-		{
-		    state = delay;
-		    sel_flag = 0;
-		}
-		else if (/*TERMINATEFLOOR*/)
-		{
-//		    memset(nextfloor, '0', 9); //clear floors
-		    state = idle;
-		}
-		else
-		    state = idle;
-	    	break;
-	    case sort:
-	    	sortarray();
-	    	state = move_x;
-	    	break;
-	    default:
-	    	;
+			case open:
+			{		    	//run func to open door
+				door(1);		// ask to open the door
+				state = delay_close;	    	//move to delay before closing door
+			} break;
+			
+			case delay_close:
+			{
+			    	delay_flag=1;
+			    	if (delay_time == 3)
+				{
+				    state = closing;
+				    delay_time = 0;
+				}
+			} break;
 
-	    }
-	}
+			case delay: //use ISR routine for counting 3 seconds
+			{
+
+			    	delay_flag=1;
+			    	read_keypad(); //read keypad (IN PROGRESS)
+
+			    	if (sel_flag==1)
+			    	{
+			    	    delay_time = 0;
+			    	    sel_flag = 0;
+			    	}
+
+			    	if (delay_time == 3)
+				{
+				    state = adj_distance;	// proceed to adjust distance 
+				    delay_time = 0;
+				}
+			} break;
+			
+			case closing:
+			{    	//run close door function here
+			    	door(0); //close the door
+			    	if ((call_flag==1)|(floor_distance_pointer==5))
+			    	{
+			    		state = idle;
+			    		call_flag = 0;
+			    	}
+				else
+			    		state = adj_distance;
+			} break;
+			
+			case adj_distance:
+			{	adjustarray();
+				state = move_x;
+				break;
+			default:
+				;
+
+			}
+		}
 
 	return 1;
+	}
 }
 // *** ISRs BEGIN ***
 ISR(TIMER0_OVF_vect)
 {
     overflow_count0++;
-    if (overflow_count0 >=3906) // incr every sec 
+    if (overflow_count0 >=3906) // incr every sec
     {
     	overflow_count0 = 0;
     	if (delay_flag==1)
     	    delay_time++;
 	else
 	    ;
-	    
+
     }
 
 }
 
-ISR(TIMER1_OVF_vect) // ISR with timer overflow interrupt argument
+ISR(TIMER1_OVF_vect)			// ISR with timer overflow interrupt argument
 {
-    overflow_count1++;       // increase when overflow reached
-    if(overflow_count1 >= 100) // if count is (greater/equal) passed
-    {							// I pick a random number ~100
-	overflow_count1 = 0;  // reset overflow counter
-	 DDRD ^= 0b00110000; // toggle PD4(OC1B) and PD5(OC1A)
-    }	
+	overflow_count1++;			// increase when overflow reached
+	if(overflow_count1 >= delay_time_move)	// if count is (greater/equal) passed
+	{
+		overflow_count1 = 0;	       	// reset overflow counter
+		interrupt_ack_flag = 1;		// set interrupt acknowlegde flag to 1 after delay time
+	}
 }
 // *** ISRs END ***
 
@@ -203,21 +236,112 @@ ISR(TIMER1_OVF_vect) // ISR with timer overflow interrupt argument
 
 // *** FUNCTIONS ***
 // please add comments to your functions to explain functionality
-void sortarray() //not sure if needed yet
-{
-    // sort array here and return it?
-}
-void flooraddsort(char digit, int mode) //mode 0 = reset, mode 1 = add
-{
-    int y;
-    if (mode == 0)
-    {
-    	y=0;
-    }
-    else
-    {
 
-    }
+void move_elevator(int number_of_floor)
+{
+	unsigned int period = 5000;				// PWM T=5ms or f=200Hz
+	unsigned int duty_cycle;				// duty cycle
+	unsigned int high_time = (period/100)*duty_cycle;	// PWM highTime=3.5ms
+	unsigned int delay_time_per_floor = 300;		// time to one floor up or down
+	delay_time_move = number_of_floor * delay_time_per_floor; 	//set delay time
+	ICR1 = period;						// set PWM time period to ICR1
+	if(dir_flag == 1) { duty_cycle = 70; }		// set duty cycle
+	else if(dir_flag == 0) { duty_cycle = 30; }
+	high_time = (period/100)*duty_cycle;			// set PWM high time to OCR1A
+	OCR1A = high_time;
+	DDRD = 0b00100000;		// enable PD5
+	overflow_count1 =  0;
+	interrupt_ack_flag=0;		// set interrupt acknowledge flag to 0
+	sei();				// enable interrupt subsystem globally
+	while(interrupt_ack_flag==0){;}	// if interrupt acknowledge flag is 1,quit loop
+	cli();				// disable interrupt
+	DDRD = 0b00000000;		// disable PortD
+
+	if(dir_flag==1)
+		current_floor = current_floor + number_of_floor;
+	else if (dir_flag == 0)
+		current_floor = current_floor - number_of_floor;
+
+	fr_flag = 1;			// flag that floor has been reached
+
+}
+
+void move_door()
+{
+	unsigned int period = 5000;				// T=5ms or f=200Hz
+	unsigned int duty_cycle;				// Duty Cycle
+	unsigned int high_time = (period/100)*duty_cycle;	// PWM high time=
+	unsigned int delay_time_door = 100;			// time fo servo to open or close door
+//	delay_time_move = number_of_floor * delay_time_door;
+	ICR1 = period;
+
+	if(door_flag == 1){ duty_cycle = 70;}		// assign duty cycle to open the door
+	else						// assign duty cycle to close the door
+		{
+			door_check();			// check and wait for door close
+			duty_cycle = 30;
+		}
+	high_time = (period/100)*duty_cycle;		// PWM high time
+	OCR1A = high_time;
+	DDRD = 0b00010000;
+	overflow_count1 = 0;
+	sei();						// enable interrupt subsystem globally
+	interrupt_ack_flag=0;				// set acknoledgement interupt
+	while(interrupt_ack_flag==0){;}			//
+	cli();						// disable interrupt
+	DDRD = 0b00000000;				// disable PortD pins
+}
+
+void floor_array_clear()
+{
+	for(int i =0; i<5; i++)
+	{
+		floor_selection[i]=0;
+	}
+	floor_selection_pointer = 1;
+}
+
+void adjustarray() // readjust for floor distance relative to current position and move to closest floor
+{
+	for(int i = 0; i<5; i++)
+	{
+		floor_distance[i]=floor_distance[i]-current_floor;
+	}
+	for(int i = 0; i<5; i++)
+	{
+		switch(dir_flag)
+		{
+			case 0:
+			{
+				if((next_distance > floor_distance[i])&&(floor_distance[i]>0))	//find closest positive 
+					next_distance = floor_distance[i];
+			} break;
+			case 1:
+			{
+				if((next_distance > floor_distance[i])&&(floor_distance[i]<0))	//find closest negative
+					next_distance = (-1)*floor_distance[i];
+			} break;
+		}
+	}
+}
+void floor_compare_add(int digit)	// makes sure no duplicates are added into array
+{
+	volatile bool dupl_flag = 0;
+	for(int i = 0; i<5; i++)
+	{
+		if(floor_selection[i]==digit)
+			dupl_flag = 1;
+		else
+			;
+	}
+	if (dupl_flag==0)
+	{
+		floor_selection[floor_selection_pointer]=digit;
+		floor_selection_pointer++;
+	}
+	else
+		;
+
 }
 
 void timer_init() // All timer configurations go here
@@ -237,27 +361,26 @@ void timer_init() // All timer configurations go here
 
         /*TIMSK  = 0b00000100;*/
         // Please use method below to enable your interrupts
-        // TIMSK is used for all timers 
+        // TIMSK is used for all timers
 	// usage: TIMSK |= (1 << desiredbit)
-        TIMSK |= (1 << TOIE0);	//enable interrupt for timer0
+    TIMSK |= (1 << TOIE0);	//enable interrupt for timer0
 	TIMSK |= 0b00000100;	//enable timer1 ovf int
 }
+void read_keypad(unsigned int digit_old){
+	unsigned int digit;
+	unsigned int y = 0;
+	unsigned int x = 0;
+	unsigned int pressed = 0;
+	unsigned int porta_signals = (0b00000000);
+	unsigned int bitcheck = 3;
 
-unsigned char read_keypad(unsigned char digit_old){
-	unsigned char digit;
-	unsigned char y = 0;
-	unsigned char x = 0;
-	unsigned char pressed = 0;
-	unsigned char porta_signals = (0b00000000);
-	unsigned char bitcheck = 3;
-
-	for(unsigned char row = 3; row>=0; row--){
+	for(unsigned int row = 3; row>=0; row--){
 		porta_signals = (1<<(row+4)); //shift 0b1 over 5, 6, 7 bits
 		PORTA = ~porta_signals;		//make sure things are done with active low
 		//begin checking columns ...
 		x = 0;
 		bitcheck = 3;
-		for(unsigned char column = 0; column <= 3; column++)
+		for(unsigned int column = 0; column <= 3; column++)
 		{
 			if(!bit_is_set(PINA, bitcheck))
 			{
@@ -276,24 +399,31 @@ unsigned char read_keypad(unsigned char digit_old){
 			y++; //y is to mark ROW
 	}
 
-	if (pressed==1){ //pressed=1 means a key has been pressed
+	if (pressed==1) //pressed=1 means a key has been pressed
+	{ 
 		digit = keypad_key[y][x]; // returns a digit based on y,x coord
-		if ((digit == 'A')|(digit == 'B')|(digit == 'C')|(digit == 'D'))
-		    call_flag = 1;
-		else
+		if ((digit == 44)|(digit == 33)|(digit ==  22)|(digit == 11))
+		{
+			call_flag = 1;
+			digit = digit/11;
+			call_floor_distance = digit - current_floor;
+			if (call_floor_distance < 0)
+				dir_flag = 0;		// if floor is called below current floor, move down
+			else
+				dir_flag = 1;
+		}
+		else if(digit!=69)
 		{
 		    sel_flag = 1;
-		    flooraddsort(digit);
+		    floor_compare_add(digit);
 		}
+		else
+			;
 
-		/*return digit;*/
 	}
-	else
-	    ;
-		/*return digit_old;	//if no button press is detected, print old digit*/
 }
 
-void display_7led(unsigned char a)
+void display_7led(unsigned int a)
 {
 	switch(a)
 	{
@@ -311,39 +441,6 @@ void display_7led(unsigned char a)
 			break;
 		case '4':
 			PORTA = 0x19;
-			break;
-		case '5':
-			PORTA = 0x12;
-			break;
-		case '6':
-			PORTA = 0x02;
-			break;
-		case '7':
-			PORTA = 0x78;
-			break;
-		case '8':
-			PORTA = 0x00;
-			break;
-		case '9':
-			PORTA = 0x10;
-			break;
-		case 'A':
-			PORTA = 0x08;
-			break;
-		case 'B':
-			PORTA = 0x03;
-			break;
-		case 'C':
-			PORTA = 0x46;
-			break;
-		case 'D':
-			PORTA = 0x21;
-			break;
-		case '*':
-			PORTA = 0x23;
-			break;
-		case '#':
-			PORTA = 0x0F;
 			break;
 	}
 }
