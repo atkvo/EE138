@@ -65,7 +65,8 @@ int main (void)
 	PORTA = 0xFF;		// P.A[3:0] Pullup P.A[7:4] set HIGH
 	DDRB  = 0xFF;		// P.B for 7seg
 	PORTB = 0xFF;		//
-
+	DDRC  = 0xFF;		// Port C for debugging purposes
+	PORTC = 0x00;
 	timer_init();		// initialize timer
 	sei();				// enable global interrupts
 
@@ -76,13 +77,12 @@ int main (void)
 
 	while(1)
 	{
-
+		display_7led(current_floor);
 		switch (state)
 		{
 
 		case idle:
 		{
-			display_7led(1);
 			read_keypad();
 			if(call_flag==1)
 			{
@@ -93,25 +93,23 @@ int main (void)
 
 		case move_x:
 		{
-			display_7led(2);
 			if(call_flag==1)
 			{
 				move_elevator(call_floor_distance);	// move to called floor
 				call_floor_distance = 0;
+				call_flag=0; 			// reset call flag
 				state=open;
 			}
 			break;
 		}
 		case open:
 		{
-			display_7led(3);
 			move_door(1);		// open the door
 			state=delay_close;
 			break;
 		}
 		case delay_close:
 		{
-			display_7led(4);
 			delay_flag = 1;		//begin counting delay_time
 			if(delay_time == 3)	// wait 3 sec before closing door
 			{
@@ -123,24 +121,24 @@ int main (void)
 		}
 		case delay:
 		{
-			display_7led(5);
+
 			delay_flag = 1;		// begin counting delay_time
 
 			break;
 		}
 		case closing:
 		{
-			display_7led(6);
 			move_door(0); 		// close the door
 			state = idle;
 			break;
 		}
 		case adj_distance:
 		{
-			display_7led(7);
+
 			break;
 		}
-		default: display_7led(8);
+		default:
+			;
 		} //end of switch
 
 	} //end of while
@@ -322,11 +320,11 @@ void read_keypad()
 			}
 			else
 				dir_flag = 1;
+			PORTC=~digit;
 		}
-		else
-			;
-
 	}
+	else
+		;
 }
 
 void display_7led(int a)
