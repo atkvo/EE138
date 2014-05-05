@@ -70,11 +70,7 @@ int main (void)
 	timer_init();		// initialize timer
 	sei();				// enable global interrupts
 
-	//quick function test
-	move_elevator(1);
-	move_door(0);
-	move_door(1);
-
+	current_floor=1;
 	while(1)
 	{
 		display_7led(current_floor);
