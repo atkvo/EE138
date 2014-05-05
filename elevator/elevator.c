@@ -34,10 +34,10 @@
 // PD7 for PWM output
 
 // Keypad
-// Use PortC
+// Use PortA
 
 // 7Segment
-// PA[7:1]
+// PB[7:1]
 
 // ADC0
 // PA[0]
@@ -72,8 +72,8 @@ volatile int call_floor_distance = 0;
 
 
 // *** status flags BEGIN ***
-char floor_selection[5] = {0};
-char floor_distance[5] = {0};
+int floor_selection[5] = {0};
+int floor_distance[5] = {0};
 volatile bool door_flag;	 // flag in the ISR for time delay
 volatile bool elevator_flag;		// 1 means elevator is in up mode, 0 means down mode
 // volatile bool door_flag;			// 1 means door is in open mode, 0 means close mode.
@@ -82,19 +82,18 @@ volatile bool call_flag=0;
 volatile bool sel_flag=0;
 volatile bool delay_flag = 0;
 volatile bool fr_flag = 0; // "floor reached" flag
-volatile bool dir_flag = 0; // 0 signals down, 1 signals up
+volatile bool dir_flag = 1; // 0 signals down, 1 signals up
 
 // *** status flags END ***
 
 
 // *** FUNCTIONS HERE ***
 void read_keypad();
-void display_7led(unsigned int a);
+void display_7led(int a);
 void bell();
 void move_door();						// function to have door open or close
 void door_check();						// function for door closing transition time, and sensor checking
 void move_elevator(int number_of_floor); // function to have elevator moving up or down
-void pause();			// generic delay func using timer0
 void adjustarray();
 void floor_array_clear();
 void floor_compare_add();	// make sure no duplicates pressed
@@ -106,19 +105,36 @@ int main (void)
 {
 	enum states state = idle; // initial state is idle
 
-	DDRC  = 0xF0;		// P.A[7:4] OUT P.A[3:0] IN
-	PORTC = 0xFF;		// P.A[3:0] Pullup P.A[7:4] set HIGH
+	DDRA  = 0xF0;		// P.A[7:4] OUT P.A[3:0] IN
+	PORTA = 0xFF;		// P.A[3:0] Pullup P.A[7:4] set HIGH
+	DDRB  = 0xFF;		// P.B for 7seg
+	PORTB = 0xFF;
+	timer_init();
+	sei();
+//	while(1)
+//	{
+//		move_door(1);
+//		move_door(0);
+//	}
 	while(1)
 	{
-		move_elevator(2);
+//		move_elevator(1);
+		display_7led(current_floor);
+//		move_door(0);
+//		move_door(1);
+//		move_elevator(0);
+//		display_7led(current_floor);
 		switch(state){
 			case idle:
 			{
 				fr_flag = 0;
 				floor_distance_pointer=0;
+
 				read_keypad();
+//				display_7led(3);
 				if (call_flag==1)
 				{
+					display_7led(1);
 				    state=move_x;
 				    sel_flag=0;
 				}
@@ -129,7 +145,8 @@ int main (void)
 				}
 				else
 				    state = idle;
-			} break;
+				break;
+			}
 
 			case move_x:
 			{
@@ -164,6 +181,7 @@ int main (void)
 
 			case delay: //use ISR routine for counting 3 seconds
 			{
+
 
 			    	delay_flag=1;
 			    	read_keypad(); //read keypad (IN PROGRESS)
@@ -209,15 +227,15 @@ int main (void)
 // *** ISRs BEGIN ***
 ISR(TIMER0_OVF_vect)
 {
+	display_7led(9);
+	if (delay_flag==1)
+	{
     overflow_count0++;
-    if (overflow_count0 >=3906) // incr every sec
-    {
-    	overflow_count0 = 0;
-    	if (delay_flag==1)
-    	    delay_time++;
-	else
-	    ;
-
+		if (overflow_count0 >=3906) // incr every sec
+		{
+			overflow_count0 = 0;
+			delay_time++;
+		}
     }
 
 }
@@ -225,7 +243,9 @@ ISR(TIMER0_OVF_vect)
 ISR(TIMER1_OVF_vect)			// ISR with timer overflow interrupt argument
 {
 	if(move_flag == 1)
+	{
 		overflow_count1++;			// increase when overflow reached
+	}
 	else if (door_flag==1)
 		overflow_count1++;
 	if(overflow_count1 >= delay_time_move)	// if count is (greater/equal) passed
@@ -251,7 +271,7 @@ void move_elevator(int number_of_floor) //will also update current floor
 	else
 		duty_cycle = 30;
 	unsigned int high_time = (period/100)*duty_cycle;	// PWM highTime=3.5ms
-	unsigned int delay_time_per_floor = 300;		// time to one floor up or down
+	unsigned int delay_time_per_floor = 500;		// time to one floor up or down
 	delay_time_move = number_of_floor * delay_time_per_floor; 	//set delay time
 	ICR1 = period;						// set PWM time period to ICR1
 
@@ -283,35 +303,26 @@ void move_door(int door_motion)	//1 = open, 0 = close
 	if(door_motion == 1){
 		duty_cycle = 70;
 	}		// assign duty cycle to open the door
-	else if (door_motion==0)						// assign duty cycle to close the door
+	else // assign duty cycle to close the door
 	{
 //			door_check();			// check and wait for door close
-			duty_cycle = 30;
+			duty_cycle = 40;
 	}
 	unsigned int high_time = (period/100)*duty_cycle;	// PWM high time=
-	unsigned int delay_time_door = 100;			// time fo servo to open or close door
-//	delay_time_move = number_of_floor * delay_time_door;
+	unsigned int delay_time_door = 500;			// time fo servo to open or close door
+	delay_time_move = delay_time_door;
 	ICR1 = period;
 
 
 	high_time = (period/100)*duty_cycle;		// PWM high time
-	OCR1A = high_time;
+	OCR1B = high_time;
 	DDRD = 0b00010000;
 	overflow_count1 = 0;
-	while(door_flag==0){;}			//
+	door_flag=1;
+	while(door_flag==1){;}			//
 
 	DDRD = 0b00000000;				// disable PortD pins
 }
-//void door_check()
-//{
-//	unsigned int delay_door_transition_time = 200;	// transmition time to close the door
-//	delay_time_move = delay_door_transition_time;
-//	overflow_count1 = 0;
-//	door_flag=1;		// set door_flag=1 when opening the door
-//	sei();
-//	while(door_flag==1){;}
-//	cli();
-//}
 
 void floor_array_clear()
 {
@@ -369,6 +380,7 @@ void timer_init() // All timer configurations go here
 {
     // TIMER0 begin
     	TCCR0 = 0b00000001; //no prescale
+    	TCNT0 = 0;
     // TIMER0 end
 
     // TIMER1 begin
@@ -376,6 +388,7 @@ void timer_init() // All timer configurations go here
 	//CS1[2:0] = 001 for 1MHz no prescale
 	//COM1A[1:0] = 10 for CLEAR OC1A on match (to OCR1A)
 	//COM1B[1:0] = 10
+//	TCCR1A = 0b10100010;
 	TCCR1A = 0b10100010;
 	TCCR1B = 0b00011001;
     // TIMER1 end
@@ -384,26 +397,29 @@ void timer_init() // All timer configurations go here
         // Please use method below to enable your interrupts
         // TIMSK is used for all timers
 	// usage: TIMSK |= (1 << desiredbit)
-    TIMSK |= (1 << TOIE0);	//enable interrupt for timer0
 	TIMSK |= 0b00000100;	//enable timer1 ovf int
+    TIMSK |= (1 << TOIE0);	//enable interrupt for timer0
+
 }
-void read_keypad(unsigned int digit_old){
+void read_keypad()
+{
 	unsigned int digit;
 	unsigned int y = 0;
 	unsigned int x = 0;
 	unsigned int pressed = 0;
-	unsigned int portc_signals = (0b00000000);
+	unsigned int porta_signals = (0b00000000);
 	unsigned int bitcheck = 3;
 
 	for(unsigned int row = 3; row>=0; row--){
-		portc_signals = (1<<(row+4)); //shift 0b1 over 5, 6, 7 bits
-		PORTC = ~portc_signals;		//make sure things are done with active low
+		porta_signals = (1<<(row+4)); //shift 0b1 over 5, 6, 7 bits
+		PORTA = ~porta_signals;		//make sure things are done with active low
 		//begin checking columns ...
 		x = 0;
 		bitcheck = 3;
+
 		for(unsigned int column = 0; column <= 3; column++)
 		{
-			if(!bit_is_set(PINC, bitcheck))
+			if(!bit_is_set(PINA, bitcheck))
 			{
 				pressed = 1;
 				break;
@@ -422,11 +438,15 @@ void read_keypad(unsigned int digit_old){
 
 	if (pressed==1) //pressed=1 means a key has been pressed
 	{
+
 		digit = keypad_key[y][x]; // returns a digit based on y,x coord
+
 		if ((digit == 44)|(digit == 33)|(digit ==  22)|(digit == 11))
 		{
+
 			call_flag = 1;
 			digit = digit/11;
+
 			call_floor_distance = digit - current_floor;
 			if (call_floor_distance < 0)
 				dir_flag = 0;		// if floor is called below current floor, move down
@@ -435,11 +455,15 @@ void read_keypad(unsigned int digit_old){
 		}
 		else if(digit!=69)
 		{
+
 		    sel_flag = 1;	// if floor# is valid, set selection flag high
 		    if(floor_selection_pointer>5)
 		    	;
 		    else
+		    {
+		    	display_7led(digit);
 		    	floor_compare_add(digit);
+		    }
 		}
 		else
 			;
@@ -447,24 +471,40 @@ void read_keypad(unsigned int digit_old){
 	}
 }
 
-void display_7led(unsigned int a)
+void display_7led(int a)
 {
 	switch(a)
 	{
-		case '0':
-			PORTA = 0x40;
+		case 0:
+			PORTB = 0x40;
 			break;
-		case '1':
-			PORTA = 0x79;
+		case 1:
+			PORTB = 0x79;
 			break;
-		case '2':
-			PORTA = 0x24;
+		case 2:
+			PORTB = 0x24;
 			break;
-		case '3':
-			PORTA = 0x30;
+		case 3:
+			PORTB = 0x30;
 			break;
-		case '4':
-			PORTA = 0x19;
+		case 4:
+			PORTB = 0x19;
 			break;
+		case 5:
+			PORTB = 0x12;
+			break;
+		case 6:
+			PORTB = 0x02;
+			break;
+		case 7:
+			PORTB = 0x78;
+			break;
+		case 8:
+			PORTB = 0x00;
+			break;
+		case 9:
+			PORTB = 0x10;
+			break;
+
 	}
 }
