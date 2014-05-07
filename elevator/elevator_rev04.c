@@ -36,6 +36,8 @@ int floor_amount_moved = 0;
 int floor_selection_pointer = 0;// keep track of where to put non-dupl floor selection
 int up_amount; 					// how many floors to move up until begin move down
 unsigned int delay_time = 0; 	// used to count seconds (timer0)
+unsigned int delay_time_move_up;	// time for elevator to move 1 floor
+unsigned int delay_time_move_down;	// time for elevator to move 1 floor
 unsigned int delay_time_move;	// time for elevator to move 1 floor
 volatile int overflow_count1;	// overflow counter for timer 1
 volatile int overflow_count0;	// overflow counter for timer 0
@@ -128,6 +130,7 @@ int main (void)
 		}
 		case open:
 		{
+			// Bell goes here
 			move_door(1);		// open the door
 			state=delay_close;
 			break;
@@ -222,10 +225,14 @@ void move_elevator(int number_of_floor) //will also update current floor
 	else
 		duty_cycle = 30;
 	unsigned int high_time = (period/100)*duty_cycle;	// PWM highTime=3.5ms
-	unsigned int delay_time_per_floor = 250;		// time to one floor up or down
-	delay_time_move = number_of_floor * delay_time_per_floor; 	//set delay time
+	unsigned int delay_time_per_floor = 300;		// time to one floor up or down
+	delay_time_move_up = number_of_floor * 400; 	//set delay time
+	delay_time_move_down = number_of_floor * 333; 	//set delay time
 	ICR1 = period;						// set PWM time period to ICR1
-
+	if (dir_flag==1)
+		delay_time_move = delay_time_move_up;
+	else if (dir_flag==0)
+			delay_time_move = delay_time_move_down;
 	high_time = (period/100)*duty_cycle;			// set PWM high time to OCR1A
 	OCR1A = high_time;
 	DDRD = 0b00100000;		// enable PD5
@@ -234,6 +241,8 @@ void move_elevator(int number_of_floor) //will also update current floor
 	TCNT1=0;
 	while(move_flag==1){;}	// if interrupt acknowledge flag is 1,quit loop
 
+	move_flag=0;
+	door_flag=0;
 	DDRD = 0b00000000;		// disable PortD
 
 	if(dir_flag==1)
@@ -279,14 +288,14 @@ void move_door(int door_motion)	//1 = open, 0 = close
 	unsigned int period = 5000;				// T=5ms or f=200Hz
 	unsigned int duty_cycle;				// Duty Cycle
 	if(door_motion == 1){
-		duty_cycle = 70;
+		duty_cycle = 80;
 	}		// assign duty cycle to open the door
 	else // assign duty cycle to close the door
 	{
-			duty_cycle = 40;
+			duty_cycle = 30;
 	}
 	unsigned int high_time = (period/100)*duty_cycle;	// PWM high time=
-	unsigned int delay_time_door = 250;					// time fo servo to open or close door
+	unsigned int delay_time_door = 200;					// time fo servo to open or close door
 	delay_time_move = delay_time_door;
 	ICR1 = period;
 
@@ -295,7 +304,13 @@ void move_door(int door_motion)	//1 = open, 0 = close
 	DDRD = 0b00010000;
 	overflow_count1 = 0;
 	door_flag=1;
-	while(door_flag==1){;}			//
+	TCNT1 = 0;
+	if(door_motion == 0)
+		_delay_ms(750);
+	else if(door_motion == 1)
+		_delay_ms(800);
+	door_flag=0;
+	move_flag=0;
 
 	DDRD = 0b00000000;				// disable PortD pins
 }
