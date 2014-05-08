@@ -20,6 +20,6 @@ void timer_init()
 	//COM1A[1:0] = 10 for CLEAR OC1A on match (to OCR1A)
 	TCCR1A = 0b10000010;
 	TCCR1B = 0b00011001;
-	ICR1 = 300; //period time in uS
-	OCR1A = 75; //.25*300 = 75 for 25% duty cycle
+	ICR1 = 3000; //period time in uS
+	OCR1A = 750; //.25*300 = 75 for 25% duty cycle
 }
