@@ -17,7 +17,7 @@
 unsigned int keypad_key[4][4] = {{1, 2, 3, 44},
 				{4, 5, 6, 33},
 				{7, 8, 9, 22},
-				{69, 0, 69, 11}};
+				{0, 69, 69, 11}};
 enum states {
     idle,
     move_x,
@@ -208,7 +208,7 @@ void timer_init() // All timer configurations go here
 	TCCR1A = 0b10100010;
 	TCCR1B = 0b00011001;
     // TIMER1 end
-	
+
 	// TIMER2 initialization
 	TCCR2 = 0b00000001;
 	TCCR2 |= (1<<WGM20)|(1<<WGM21);   // select FAST PWM mode
@@ -216,7 +216,7 @@ void timer_init() // All timer configurations go here
 	//TIMSK |=(1<< TOIE2);
 	TCNT2 = 0;
 	// TIMER 2 end
-	
+
 	TIMSK |= 0b00000100;	//enable timer1 ovf int
         TIMSK |= (1 << TOIE0);	//enable interrupt for timer0
 
@@ -232,8 +232,8 @@ void move_elevator(int number_of_floor) //will also update current floor
 		duty_cycle = 30;
 	unsigned int high_time = (period/100)*duty_cycle;	// PWM highTime=3.5ms
 	unsigned int delay_time_per_floor = 300;		// time to one floor up or down
-	delay_time_move_up = number_of_floor * 400; 		//set delay time for up
-	delay_time_move_down = number_of_floor * 333; 		//set delay time for down
+	delay_time_move_up = number_of_floor * 407; 		//set delay time for up
+	delay_time_move_down = number_of_floor * 323; 		//set delay time for down
 	ICR1 = period;						// set PWM time period to ICR1
 	if (dir_flag==1)
 		delay_time_move = delay_time_move_up;
@@ -401,7 +401,7 @@ void door_bell()
 {
 	OCR2 = 100;
 	DDRD = 0b10000000;
-	_delay_ms(1000);
+	_delay_ms(700);
 	DDRD = 0b00000000;
 }
 
