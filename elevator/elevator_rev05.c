@@ -231,9 +231,8 @@ void move_elevator(int number_of_floor) //will also update current floor
 	else
 		duty_cycle = 30;
 	unsigned int high_time = (period/100)*duty_cycle;	// PWM highTime=3.5ms
-	unsigned int delay_time_per_floor = 300;		// time to one floor up or down
-	delay_time_move_up = number_of_floor * 407; 		//set delay time for up
-	delay_time_move_down = number_of_floor * 323; 		//set delay time for down
+	delay_time_move_up = number_of_floor * 370; 		//set delay time for up
+	delay_time_move_down = number_of_floor * 305; 		//set delay time for down
 	ICR1 = period;						// set PWM time period to ICR1
 	if (dir_flag==1)
 		delay_time_move = delay_time_move_up;
