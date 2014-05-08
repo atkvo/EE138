@@ -90,6 +90,7 @@ int main (void)
 
 		case idle:
 		{
+			dir_flag=1;	// by default, go up
 			call_floor_distance=0;
 			up_amount = 0;
 			floor_selection_pointer = 0;
@@ -195,9 +196,6 @@ int main (void)
 		}
 		case adj_distance:
 		{
-//			move_door(1);//debug
-//			display_7led(7);//debug
-
 			floor_adj();		// adjust the distances in array
 			state = move_x;		// move to next floor
 			break;
@@ -266,8 +264,6 @@ void move_elevator(int number_of_floor) //will also update current floor
 		current_floor = current_floor + number_of_floor;
 	else if (dir_flag == 0)
 		current_floor = current_floor - number_of_floor;
-
-//	fr_flag = 1;			// flag that floor has been reached
 
 }
 
@@ -348,7 +344,7 @@ void floor_adj()		// calibrate distance
 	{
 		if(floor_selection[i]>current_floor)
 			floor_distance_up[i]=(floor_selection[i]-current_floor);
-		else
+		else if(floor_selection[i]<current_floor)
 			floor_distance_down[i]=(current_floor-floor_selection[i]);
 	}
 	call_floor_distance = 10; // set randomly to start comparison

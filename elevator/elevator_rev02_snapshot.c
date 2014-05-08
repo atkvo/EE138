@@ -10,7 +10,7 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <stdbool.h>
-#include <stdlib.h>
+#include <avr/delay.h>
 
 // *** GENERIC GLOBAL VARIABLES HERE ***
 unsigned int keypad_key[4][4] = {{1, 2, 3, 44},
@@ -22,7 +22,7 @@ enum states {
     move_x,
     open,
     delay_close,
-    delay,
+    delay_select,
     adj_distance,
     closing
 };
@@ -93,6 +93,7 @@ int main (void)
 //			display_7led(1);//debug
 			up_amount = 0;
 			floor_selection_pointer = 0;
+			delay_time=0;
 //			call_flag=0;
 //			sel_flag = 0;
 			floor_clear();
@@ -107,7 +108,7 @@ int main (void)
 					dir_flag=1; //move up before going down if not on 4th floor
 				else
 					dir_flag=0; //move down if on 4th floor
-				state=delay;
+				state=delay_select;
 			}
 			break;
 		}
@@ -153,13 +154,13 @@ int main (void)
 			}
 			break;
 		}
-		case delay:	//
+		case delay_select:	//
 		{
 //			display_7led(5);//debug
 //			move_door(1);//debug
-			sel_flag=0;			// turn off select flag
+//			sel_flag=0;			// turn off select flag
+//			read_keypad(1);
 			delay_flag = 1;		// begin counting delay_time
-			read_keypad(1);
 //			if (sel_flag ==1)
 //			{
 //				delay_time = 0;	// reset delay_time if button is pressed
@@ -207,6 +208,11 @@ int main (void)
 		default:
 			;
 		} //end of switch
+
+//		_delay_ms(250);
+//		display_7led(9);
+//		_delay_ms(250);
+
 
 	} //end of while
 
@@ -381,8 +387,8 @@ void floor_adj()		// calibrate distance
 		} // end switch statement
 	}
  	floor_selection[mark_dead_pos] = 0;
- 	if (call_floor_distance < 0)	//make sure distance is always >0 in the end
- 		call_floor_distance = abs(call_floor_distance);
+// 	if (call_floor_distance < 0)	//make sure distance is always >0 in the end
+// 		call_floor_distance = abs(call_floor_distance);
 // 		call_floor_distance = call_floor_distance*(-1);
 
 }
@@ -399,6 +405,7 @@ void floor_check(int selected_floor)		// make sure not to add duplicates
 	if(dupl_flag==0)		// if selection is good, allow sel_flag=1
 	{
 		sel_flag=1;
+		delay_time = 0;
 		if(selected_floor>current_floor)
 			up_amount++;	// how many floors to move UP before going down
 		floor_selection[floor_selection_pointer]=selected_floor;
@@ -470,9 +477,12 @@ void read_keypad(int delay_state)
 //		}
 //		else //if state is 'delay' or idle
 //		{
-			else if((digit!=69)&&(floor_selection_pointer<4))	// if keypress is valid & no more than 4 floors selected
+			else if((digit<=4)&&(floor_selection_pointer<4))	// if keypress is valid & no more than 4 floors selected
 			{
+//				delay_time=0;
+//				TCNT0=0;
 //				sel_flag=1;
+//				delay_time=3;
 				PORTC=~digit;
 				floor_check(digit);
 			}
